@@ -2,6 +2,7 @@ let ratioElement;
 
 let minimumLikeRatio = 10;
 let likesText = " Likes per viewer: ";
+let percentageCalculationDelayInMs = 3000;
 
 // Where we will expose all the data we retrieve from storage.sync.
 storageCache = {};
@@ -13,11 +14,19 @@ const initStorageCache = getAllStorageSyncData().then(items => {
 });
 
 window.onload = () => {
+    // Handle loading after clicking on new videos after first page load
+    handlePageRedirectionsWithoutReload();
 
-    var delayInMilliseconds = 4000; //1 second
+    // Load percentage on first page load
+    setTimeout(function () {
+        createRatioElement();
+        calculateViewToLikesRatio();
+    }, percentageCalculationDelayInMs);
+}
 
-
+function handlePageRedirectionsWithoutReload() {
     let lastUrl = location.href;
+
     new MutationObserver(() => {
         const url = location.href;
         if (url !== lastUrl) {
@@ -28,18 +37,12 @@ window.onload = () => {
 
             setTimeout(function () {
                 calculateViewToLikesRatio();
-            }, delayInMilliseconds);
+            }, percentageCalculationDelayInMs);
         }
     }).observe(document, { subtree: true, childList: true });
-
-    setTimeout(function () {
-        createRatioElement();
-        calculateViewToLikesRatio();
-    }, delayInMilliseconds);
 }
 
 function createRatioElement() {
-    // Create ratio element
     let container = document.querySelectorAll("#info-text")[0];
     ratioElement = document.createElement("span");
     ratioElement.classList += "view-count style-scope ytd-video-view-count-renderer";
@@ -48,51 +51,89 @@ function createRatioElement() {
 }
 
 async function calculateViewToLikesRatio() {
+    if(typeof ratioElement == "undefined"){
+        console.log("Ratio element is undefined...");
+        return;
+    }
 
     try {
         await initStorageCache;
         minimumLikeRatio = storageCache.likeRatio;
-        console.log(storageCache);
+
+        if (typeof minimumLikeRatio == "undefined") {
+            console.log("Minimum like ratio is undefined!");
+            minimumLikeRatio = 3;
+        }
+
     } catch (e) {
-        // Handle error that occurred during storage initialization.
+        console.log("Failed to load extention storage data.");
     }
 
-    let container = document.querySelectorAll("#info-text")[0];
+    let viewCount = 0;
+    let likes = 0;
 
-    // Get viewcount element
-    let countElement = document.querySelectorAll("#count")[1];
-    let countElementChild = countElement.firstChild;
-    let viewCountElement = countElementChild.childNodes[1];
-    let viewCountElementData = viewCountElement.innerHTML;
-    // Get the views from viewcount element
-    let viewCount = viewCountElementData.split(" ")[0];
+    try {
+        viewCount = parseInt(getVideoViewsFromHtml());
+        likes = parseInt(getVideoLikesFromHtml());
+    } catch (e) {
+        reportDataFoundFailure();
+        return;
+    }
 
-    let replaceRegex = /,/g;
-    viewCount = viewCount.replace(replaceRegex, "");
+    if (viewCount == 0 || likes == 0) {
+        reportDataFoundFailure();
+        return;
+    }
 
-    // Get likes element
-    let likesElement = document.querySelectorAll(".style-scope .ytd-menu-renderer .force-icon-button");
-    let likesElement1 = likesElement.item(0).children[0];
-    let likesElement2 = likesElement1.children[1];
-    let likesAttribute = likesElement2.attributes[2];
-    let likes = likesAttribute.value.split(" ")[0];
-    likes = likes.replace(replaceRegex, "");
+    // Calculate the likes percentage
+    let likesPerViewerPercentage = Math.round((likes / viewCount) * 10000) / 100;
 
-    let likesPerViewerPercentage = Math.round((likes / viewCount) * 100);
-    console.log("viewcount: " + viewCount + " , likes: " + likes + " % " + likesPerViewerPercentage);
+    updateLikesPercentageText(likesPerViewerPercentage);
+    colourPercentageDependingOnValue(likesPerViewerPercentage);
+}
 
-    // Set ratio text
+function getVideoViewsFromHtml() {
+    try {
+        // Get viewcount from html element
+        let viewCount = document.querySelector(".view-count").innerHTML.split(" ")[0];
+        // Use regex to remove comma's
+        let replaceRegex = /,/g;
+        return viewCount.replace(replaceRegex, "");
+    } catch (e) {
+        console.log(e);
+    }
+
+    // Return an error value if view were not found
+    return 0;
+}
+
+function getVideoLikesFromHtml() {
+    try {
+        // Get likes element from html element
+        let likes = document.querySelectorAll("ytd-toggle-button-renderer.style-scope.force-icon-button")[0].firstChild.children[1].attributes[2].value.split(" ")[0];
+        // Use regex to remove comma's
+        let replaceRegex = /,/g;
+        return likes.replace(replaceRegex, "");
+    } catch (e) {
+        console.log(e);
+    }
+
+    // Return an error value if likes were not found
+    return 0;
+}
+
+function updateLikesPercentageText(likesPerViewerPercentage) {
     ratioElement.innerHTML = likesText + " " + likesPerViewerPercentage + "%";
+}
 
+function colourPercentageDependingOnValue(likesPerViewerPercentage) {
     if (likesPerViewerPercentage <= minimumLikeRatio) {
-        console.log(likesPerViewerPercentage + " <= " + minimumLikeRatio);
         ratioElement.style = "color: red;"
     }
     else {
         ratioElement.style = "color: green;"
     }
 }
-
 
 function getAllStorageSyncData() {
     // Immediately return a promise and start asynchronous work
@@ -107,4 +148,8 @@ function getAllStorageSyncData() {
             resolve(items);
         });
     });
+}
+
+function reportDataFoundFailure() {
+    ratioElement.innerHTML = " Failed to get viewcount / likes";
 }
