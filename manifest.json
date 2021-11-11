@@ -1,0 +1,22 @@
+{
+	"manifest_version": 3,
+	"name": "Youtube likes to views ratio",
+	"description": "Visualize the likes to views ratio of any youtube video. Set your custom flagged ratio.",
+	"version": "0.1",
+	"author": "Ortwin Van der Stappen",
+	"background": {
+		"service_worker": "js/background.js"
+	},
+	"permissions": [
+		"storage"
+	],
+	"action": {
+		"default_popup": "html/popup.html"
+	},
+	"content_scripts": [
+		{
+			"js": ["js/youtube.js"],
+			"matches": ["https://www.youtube.com/*"]
+		}
+	]
+}
